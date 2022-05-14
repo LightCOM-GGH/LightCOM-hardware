@@ -1,20 +1,20 @@
+import glob
 import time
 
-import camera
 import inference
-import utils
 import api
+import utils
 
 
 def main():
     # model = inference.TFLite(416, 416)
-    model = inference.MobileNetV2(640, 480)
-    cam = camera.Camera(640, 480)
+    model = inference.MobileNetV2(416, 416)
+    stats = utils.Stats()
     cars_stats = utils.Stats()
     pedestrian_stats = utils.Stats()
-    
-    while True:
-        img = cam.read()
+
+    for impath in glob.glob("../data/*.jpg"):
+        img = utils.load_image(impath)
         timestamp = time.time()
 
         cars_count, pedestrian_count, vis_image = model.predict(img)
@@ -26,7 +26,7 @@ def main():
 
         print(cars_count, pedestrian_count)
         # print(len(bbox), mean)
-        utils.show("image", vis_image)
+        utils.show("image", img, 0)
 
 
 if __name__ == '__main__':

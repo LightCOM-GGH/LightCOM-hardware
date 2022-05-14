@@ -1,11 +1,15 @@
-import cv2
+import math
 import os
+
+import cv2
+import numpy as np
 import tensorflow as tf
+import tensorflow_hub as hub
 from tf2_yolov4.anchors import YOLOV4_ANCHORS
 from tf2_yolov4.model import YOLOv4
 
 CLASSES = [
-    'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
+    '', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
     'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench',
     'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra',
     'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
@@ -15,16 +19,72 @@ CLASSES = [
     'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant',
     'bed', 'dining table', 'toilet', 'tv', 'laptop',  'mouse', 'remote', 'keyboard',
     'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book',
-    'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+    'clock', 'vase', 'scissors', 'teddy bear', 'hair drier'
 ]
 
 FILTER = ["person", "bicycle", "car", "motorcycle", "bus", "truck"]
 
-SCORE_THRESHOLD = 0.25
-IOU_THRESHOLD = 0.25
+SCORE_THRESHOLD = 0.5
+IOU_THRESHOLD = 0.5
 MAX_OUTPUT_SIZE_PER_CLASS = 100
 MAX_TOTAL_SIZE = 100
 MODEL_PATH = os.path.normpath("../models/yolov4.tflite")
+
+
+class MobileNetV2():
+    def __init__(self, width, height):
+        self.detector = hub.load(
+            "https://tfhub.dev/tensorflow/ssd_mobilenet_v2/2")
+        self.width = width
+        self.height = height
+
+    def predict(self, img, vis=True):
+        inp = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        inp = tf.image.resize(inp, (self.height, self.width))
+        inp = tf.expand_dims(inp, axis=0)
+        inp = tf.cast(inp, dtype=tf.uint8)
+
+        pred = self.detector(inp)
+        pred = [pred["raw_detection_boxes"], pred["raw_detection_scores"],
+                pred["detection_classes"], pred["num_detections"]]
+
+        boxes, pred_conf = filter_boxes(
+            pred[0], pred[1],
+            input_shape=tf.constant([self.height, self.width])
+        )
+
+        new_boxes = tf.reshape(boxes, (tf.shape(boxes)[0], -1, 1, 4))
+        new_pred_conf = tf.reshape(pred_conf, (tf.shape(
+            pred_conf)[0], -1, tf.shape(pred_conf)[-1]))
+
+        boxes, scores, classes, detections = tf.image.combined_non_max_suppression(
+            boxes=new_boxes,
+            scores=new_pred_conf,
+            max_output_size_per_class=MAX_OUTPUT_SIZE_PER_CLASS,
+            max_total_size=MAX_TOTAL_SIZE,
+            iou_threshold=IOU_THRESHOLD,
+            score_threshold=SCORE_THRESHOLD,
+        )
+
+        pred_bbox = [boxes.numpy(), scores.numpy(),
+                     classes.numpy(), detections.numpy()]
+        filtered_bbox = process_bbox(pred_bbox)
+
+        if vis:
+            vis_image = vis_bbox(img, filtered_bbox)
+        else:
+            vis_image = None
+
+        num_cars = 0
+        num_pedestrian = 0
+        for _, _, idx, _ in filtered_bbox:
+            if CLASSES[idx] == "person":
+                num_pedestrian += 1
+            else:
+                num_cars += 1
+
+        return num_cars, num_pedestrian, vis_image
+
 
 
 class TFLite():
@@ -57,8 +117,8 @@ class TFLite():
                 for i in range(len(self.output_details))]
         boxes, pred_conf = filter_boxes(
             pred[0], pred[1],
-            score_threshold=SCORE_THRESHOLD,
             input_shape=tf.constant([self.height, self.width]),
+            yolo=True
         )
         boxes, scores, classes, detections = tf.image.combined_non_max_suppression(
             boxes=tf.reshape(boxes, (tf.shape(boxes)[0], -1, 1, 4)),
@@ -79,16 +139,23 @@ class TFLite():
         else:
             vis_image = None
 
-        return filtered_bbox, vis_image
+        num_cars = 0
+        num_person = 0
+        for _, _, idx, _ in filtered_bbox:
+            if CLASSES[idx] == "person":
+                num_person += 1
+            else:
+                num_cars += 1
+
+        return num_cars, num_person, vis_image
 
 
-def filter_boxes(box_xywh, scores, score_threshold=0.4, input_shape=tf.constant([416, 416])):
+def filter_boxes(box_xywh, scores, input_shape=tf.constant([416, 416]), yolo=False):
     """Filters the bounding boxes according to the scores.
 
     Args:
         box_xywh (_type_): _description_
         scores (_type_): _description_
-        score_threshold (float, optional): _description_. Defaults to 0.4.
         input_shape (tf.constant, optional): input shape of the model. Defaults to tf.constant([416, 416]).
 
     Returns:
@@ -96,45 +163,48 @@ def filter_boxes(box_xywh, scores, score_threshold=0.4, input_shape=tf.constant(
     """
     scores_max = tf.math.reduce_max(scores, axis=-1)
 
-    mask = scores_max >= score_threshold
+    mask = scores_max >= SCORE_THRESHOLD
     class_boxes = tf.boolean_mask(box_xywh, mask)
     pred_conf = tf.boolean_mask(scores, mask)
-    class_boxes = tf.reshape(
+
+    boxes = tf.reshape(
         class_boxes,
         [tf.shape(scores)[0], -1, tf.shape(class_boxes)[-1]])
     pred_conf = tf.reshape(
         pred_conf,
         [tf.shape(scores)[0], -1, tf.shape(pred_conf)[-1]])
 
-    box_xy, box_wh = tf.split(class_boxes, (2, 2), axis=-1)
+    if yolo:
+        box_xy, box_wh = tf.split(boxes, (2, 2), axis=-1)
 
-    input_shape = tf.cast(input_shape, dtype=tf.float32)
+        input_shape = tf.cast(input_shape, dtype=tf.float32)
 
-    box_yx = box_xy[..., ::-1]
-    box_hw = box_wh[..., ::-1]
+        box_yx = box_xy[..., ::-1]
+        box_hw = box_wh[..., ::-1]
 
-    box_mins = (box_yx - (box_hw / 2.)) / input_shape
-    box_maxes = (box_yx + (box_hw / 2.)) / input_shape
-    boxes = tf.concat([
-        box_mins[..., 0:1],  # y_min
-        box_mins[..., 1:2],  # x_min
-        box_maxes[..., 0:1],  # y_max
-        box_maxes[..., 1:2]  # x_max
-    ], axis=-1)
+        box_mins = (box_yx - (box_hw / 2.)) / input_shape
+        box_maxes = (box_yx + (box_hw / 2.)) / input_shape
+        boxes = tf.concat([
+            box_mins[..., 0:1],  # y_min
+            box_mins[..., 1:2],  # x_min
+            box_maxes[..., 0:1],  # y_max
+            box_maxes[..., 1:2]  # x_max
+        ], axis=-1)
     return (boxes, pred_conf)
 
 
-def process_bbox(bboxes):
+def process_bbox(bboxes, offset=-1):
     filtered = []
     out_boxes, out_scores, out_classes, num_boxes = bboxes
     count = 0
-    for i in range(num_boxes[0]):
+    for i in range(int(num_boxes[0])):
         class_idx = int(out_classes[0][i])
-        if class_idx < 0 or class_idx > len(CLASSES) or CLASSES[class_idx] not in FILTER:
+        if class_idx < 0 or class_idx > len(CLASSES) or \
+                out_scores[0][i] < SCORE_THRESHOLD or CLASSES[class_idx] not in FILTER:
             continue
         count += 1
         filtered.append(
-            (out_boxes[0][i], out_scores[0][i], out_classes[0][i], i))
+            (out_boxes[0][i], out_scores[0][i], class_idx, i))
     return filtered
 
 
@@ -166,5 +236,5 @@ def vis_bbox(image, bboxes):
                     (c1[0], int(c1[1] - 2)),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     fontScale, (0, 0, 0), bbox_thick // 2, lineType=cv2.LINE_AA)
-    
+
     return image

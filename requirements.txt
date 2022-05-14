@@ -2,3 +2,5 @@ tensorflow
 opencv-python
 tf2-yolov4
 numpy
+requests
+uuid
