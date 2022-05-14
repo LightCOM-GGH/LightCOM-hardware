@@ -18,6 +18,8 @@ CLASSES = [
     'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
 ]
 
+FILTER = ["person", "bicycle", "car", "motorcycle", "bus", "truck"]
+
 SCORE_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.25
 MAX_OUTPUT_SIZE_PER_CLASS = 100
@@ -68,13 +70,16 @@ class TFLite():
             score_threshold=SCORE_THRESHOLD,
         )
 
+        pred_bbox = [boxes.numpy(), scores.numpy(),
+                     classes.numpy(), detections.numpy()]
+        filtered_bbox = process_bbox(pred_bbox)
+
         if vis:
-            pred_bbox = [boxes.numpy(), scores.numpy(),
-                         classes.numpy(), detections.numpy()]
-            vis_image = draw_bbox(img, pred_bbox)
+            vis_image = vis_bbox(img, filtered_bbox)
         else:
             vis_image = None
-        return boxes, scores, classes, detections, vis_image
+
+        return filtered_bbox, vis_image
 
 
 def filter_boxes(box_xywh, scores, score_threshold=0.4, input_shape=tf.constant([416, 416])):
@@ -119,37 +124,47 @@ def filter_boxes(box_xywh, scores, score_threshold=0.4, input_shape=tf.constant(
     return (boxes, pred_conf)
 
 
-def draw_bbox(image, bboxes, show_label=True):
-    num_classes = len(CLASSES)
-    image_h, image_w, _ = image.shape
-
+def process_bbox(bboxes):
+    filtered = []
     out_boxes, out_scores, out_classes, num_boxes = bboxes
+    count = 0
     for i in range(num_boxes[0]):
-        if int(out_classes[0][i]) < 0 or int(out_classes[0][i]) > num_classes:
+        class_idx = int(out_classes[0][i])
+        if class_idx < 0 or class_idx > len(CLASSES) or CLASSES[class_idx] not in FILTER:
             continue
-        coor = out_boxes[0][i]
+        count += 1
+        filtered.append(
+            (out_boxes[0][i], out_scores[0][i], out_classes[0][i], i))
+    return filtered
+
+
+def vis_bbox(image, bboxes):
+    image_h, image_w, _ = image.shape
+    # out_boxes, out_scores, out_classes, num_boxes = bboxes
+
+    for coor, out_score, out_class, i in bboxes:
+        class_idx = int(out_class)
+
         coor[0] = int(coor[0] * image_h)
         coor[2] = int(coor[2] * image_h)
         coor[1] = int(coor[1] * image_w)
         coor[3] = int(coor[3] * image_w)
 
         fontScale = 0.5
-        score = out_scores[0][i]
-        class_ind = int(out_classes[0][i])
         bbox_thick = int(0.6 * (image_h + image_w) / 600)
         c1, c2 = (int(coor[1]), int(coor[0])), (int(coor[3]), int(coor[2]))
         cv2.rectangle(image, c1, c2, (255, 0, 0), bbox_thick)
 
-        if show_label:
-            bbox_mess = '%s: %.2f' % (CLASSES[class_ind], score)
-            t_size = cv2.getTextSize(
-                bbox_mess, 0, fontScale, thickness=bbox_thick // 2)[0]
-            c3 = (c1[0] + t_size[0], c1[1] - t_size[1] - 3)
-            cv2.rectangle(image, c1, (int(c3[0]), int(
-                c3[1])), (255, 0, 0), -1)  # filled
+        bbox_mess = '%s: %.2f' % (CLASSES[class_idx], out_score)
+        t_size = cv2.getTextSize(
+            bbox_mess, 0, fontScale, thickness=bbox_thick // 2)[0]
+        c3 = (c1[0] + t_size[0], c1[1] - t_size[1] - 3)
+        cv2.rectangle(image, c1, (int(c3[0]), int(
+            c3[1])), (255, 0, 0), -1)  # filled
 
-            cv2.putText(image, bbox_mess,
-                        (c1[0], int(c1[1] - 2)),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        fontScale, (0, 0, 0), bbox_thick // 2, lineType=cv2.LINE_AA)
+        cv2.putText(image, bbox_mess,
+                    (c1[0], int(c1[1] - 2)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    fontScale, (0, 0, 0), bbox_thick // 2, lineType=cv2.LINE_AA)
+    
     return image

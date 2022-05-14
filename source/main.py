@@ -11,15 +11,16 @@ def main(demo=False):
     if demo:
         for impath in glob.glob("../data/*.jpg"):
             img = utils.load_image(impath)
-            boxes, scores, classes, detections, vis_image = model.predict(
-                img, vis=True)
+            bbox, vis_image = model.predict(img, vis=True)
+            print(len(bbox))
             utils.show("vis", vis_image, 0)
 
     else:
         cam = camera.Camera(224, 224)
         while True:
             img = cam.read()
-            boxes, scores, classes, detections, vis_image = model.predict(img)
+            bbox, vis_image = model.predict(img)
+            print(len(bbox))
             utils.show("image", img)
 
 
