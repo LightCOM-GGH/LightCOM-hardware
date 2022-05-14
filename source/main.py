@@ -4,6 +4,7 @@ import camera
 import inference
 import utils
 import api
+import lighthandler
 
 
 def main():
@@ -12,6 +13,7 @@ def main():
     cam = camera.Camera(640, 480)
     cars_stats = utils.Stats()
     pedestrian_stats = utils.Stats()
+    trafficLight = lighthandler.TrafficLight(30)
 
     while True:
         img = cam.read()
@@ -22,10 +24,13 @@ def main():
         cars_mean = cars_stats.add(timestamp, cars_count)
         pedestrian_mean = pedestrian_stats.add(timestamp, pedestrian_count)
 
-        api.send_info(cars_count, pedestrian_count,
-                      cars_mean, pedestrian_mean, "red")
+        # update traffic light data
+        trafficLight()
 
-        print(cars_count, pedestrian_count)
+        api.send_info(cars_count, pedestrian_count,
+                      cars_mean, pedestrian_mean, trafficLight.state)
+
+        print(cars_count, pedestrian_count, trafficLight.state)
         # print(len(bbox), mean)
         utils.show("image", vis_image)
 
