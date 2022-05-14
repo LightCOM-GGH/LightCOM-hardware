@@ -12,7 +12,7 @@ def main():
     cam = camera.Camera(640, 480)
     cars_stats = utils.Stats()
     pedestrian_stats = utils.Stats()
-    
+
     while True:
         img = cam.read()
         timestamp = time.time()
@@ -21,8 +21,9 @@ def main():
 
         cars_mean = cars_stats.add(timestamp, cars_count)
         pedestrian_mean = pedestrian_stats.add(timestamp, pedestrian_count)
-        
-        api.send_info(cars_count, pedestrian_count, cars_mean, pedestrian_mean, "red")
+
+        api.send_info(cars_count, pedestrian_count,
+                      cars_mean, pedestrian_mean, "red")
 
         print(cars_count, pedestrian_count)
         # print(len(bbox), mean)

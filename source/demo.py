@@ -9,7 +9,6 @@ import utils
 def main():
     # model = inference.TFLite(416, 416)
     model = inference.MobileNetV2(416, 416)
-    stats = utils.Stats()
     cars_stats = utils.Stats()
     pedestrian_stats = utils.Stats()
 
@@ -21,8 +20,9 @@ def main():
 
         cars_mean = cars_stats.add(timestamp, cars_count)
         pedestrian_mean = pedestrian_stats.add(timestamp, pedestrian_count)
-        
-        api.send_info(cars_count, pedestrian_count, cars_mean, pedestrian_mean, "red")
+
+        api.send_info(cars_count, pedestrian_count,
+                      cars_mean, pedestrian_mean, "red")
 
         print(cars_count, pedestrian_count)
         # print(len(bbox), mean)
