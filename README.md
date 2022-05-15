@@ -6,9 +6,14 @@ setup the venv:
 python3 -m venv env
 ```
 
-activate venv:
+activate venv on Windows:
 ```
 env\Scripts\activate.bat
+```
+
+activate venv on Linux:
+```
+source env/bin/activate
 ```
 
 install all the requirements:
@@ -25,7 +30,7 @@ https://lindevs.com/yolov4-object-detection-using-tensorflow-2/
 ### Demo images from data/ folder
 ```
 cd source
-python main.py demo
+python demo.py
 ```
 
 ### Run with the camera
