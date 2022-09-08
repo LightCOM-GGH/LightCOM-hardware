@@ -9,7 +9,7 @@ from tf2_yolov4.anchors import YOLOV4_ANCHORS
 from tf2_yolov4.model import YOLOv4
 
 CLASSES = [
-    '', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
+    'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
     'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench',
     'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra',
     'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
@@ -19,7 +19,7 @@ CLASSES = [
     'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant',
     'bed', 'dining table', 'toilet', 'tv', 'laptop',  'mouse', 'remote', 'keyboard',
     'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book',
-    'clock', 'vase', 'scissors', 'teddy bear', 'hair drier'
+    'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', ''
 ]
 
 FILTER = ["person", "bicycle", "car", "motorcycle", "bus", "truck"]
@@ -29,6 +29,7 @@ IOU_THRESHOLD = 0.5
 MAX_OUTPUT_SIZE_PER_CLASS = 100
 MAX_TOTAL_SIZE = 100
 MODEL_PATH = os.path.normpath("../models/yolov4.tflite")
+
 
 
 class MobileNetV2():
@@ -132,7 +133,7 @@ class TFLite():
 
         pred_bbox = [boxes.numpy(), scores.numpy(),
                      classes.numpy(), detections.numpy()]
-        filtered_bbox = process_bbox(pred_bbox)
+        filtered_bbox = process_bbox(pred_bbox, offset=0)
 
         if vis:
             vis_image = vis_bbox(img, filtered_bbox)
@@ -197,8 +198,8 @@ def process_bbox(bboxes, offset=-1):
     filtered = []
     out_boxes, out_scores, out_classes, num_boxes = bboxes
     count = 0
-    for i in range(int(num_boxes[0])):
-        class_idx = int(out_classes[0][i])
+    for i in range(int(num_boxes[0])):  
+        class_idx = int(out_classes[0][i]) + offset
         if class_idx < 0 or class_idx > len(CLASSES) or \
                 out_scores[0][i] < SCORE_THRESHOLD or CLASSES[class_idx] not in FILTER:
             continue

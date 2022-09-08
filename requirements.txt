@@ -1,4 +1,4 @@
-tensorflow
+tensorflow < 2.10.0
 tensorflow_hub
 opencv-python
 tf2-yolov4
